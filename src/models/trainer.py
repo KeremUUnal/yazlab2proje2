@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Type
 
 import numpy as np
-import tensorflow as tf
+import torch
 
 from src.config import Config
 from src.evaluation.metrics import compute_metrics
@@ -45,7 +45,7 @@ class Trainer:
         all_results = []
 
         for seed in self.config.model.seeds:
-            tf.random.set_seed(seed)
+            torch.manual_seed(seed)
             np.random.seed(seed)
 
             X_tr_seq, y_tr_seq = create_sequences(X_train, y_train, seq_len)
