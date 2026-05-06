@@ -1,0 +1,68 @@
+data:
+  skab:
+    raw_path: "data/raw/SKAB"
+    folders: ["valve1", "valve2"]
+    target_col: "anomaly"
+    # Veri dosyasından kontrol edilmeli - datetime sütununun gerçek adı
+    datetime_col: "datetime"
+    exclude_cols: ["datetime", "changepoint", "source_group", "source_file"]
+    separator: ";"
+  batadal:
+    raw_path: "data/raw/BATADAL"
+    file: "BATADAL_dataset04.csv"
+    label_col: "ATT_FLAG"
+    normal_value: -999
+    time_cols: ["DATETIME"]
+    train_ratio: 0.6
+    val_ratio: 0.2
+    test_ratio: 0.2
+
+preprocessing:
+  normalize: true
+  handle_missing: true
+  pca:
+    enabled: true
+    n_components: 1
+
+model:
+  seeds: [42, 123, 2026, 7, 999]
+  epochs: 50
+  batch_size: 32
+  sequence_length: 30
+  early_stopping:
+    patience: 5
+    monitor: "val_loss"
+  lstm:
+    units: [64, 32]
+    dropout: 0.2
+  gru:
+    units: [64, 32]
+    dropout: 0.2
+  cnn:
+    filters: [32, 64]
+    kernel_size: 3
+    dropout: 0.2
+
+automata:
+  window_size: 4
+  alphabet_size: 3
+  param_search:
+    window_sizes: [3, 4, 5, 6]
+    alphabet_sizes: [3, 4, 5, 6]
+
+experiment:
+  noise:
+    gaussian_std: 0.1
+  scenarios: ["original", "noisy", "unseen"]
+
+evaluation:
+  skab:
+    method: "StratifiedGroupKFold"
+    n_splits: 5
+    group_col: "source_file"
+  batadal:
+    method: "time_ordered"
+
+results:
+  output_dir: "results"
+  log_dir: "logs"

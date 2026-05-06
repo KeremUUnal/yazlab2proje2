@@ -1,0 +1,24 @@
+# Veri dosyaları (büyük, lisans kısıtlı)
+data/raw/**/*.csv
+data/processed/
+
+# Model çıktıları ve sonuçlar
+results/*.json
+results/*.png
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Ortam
+venv/
+.env
+*.h5
+*.pkl
+*.keras
