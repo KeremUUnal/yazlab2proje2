@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.model_selection import StratifiedGroupKFold, GroupKFold
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, List, Tuple
 from src.config import Config
 
@@ -13,8 +13,9 @@ class DataSplit:
     """
     Kişi 1 ve Kişi 2 arasındaki ortak veri arayüzü.
 
-    X alanları: (n_samples, 1) — PCA sonrası PC1
-    y alanları: (n_samples,)  — binary (0: normal, 1: anomali)
+    DL modelleri için: X shape (n, n_features) — PCA uygulanmaz
+    Otomata modeli için: X shape (n, 1) — PCA ile PC1
+    y alanları: (n_samples,) — binary (0: normal, 1: anomali)
     groups: SKAB GroupKFold için source_file değerleri
     """
     X_train: np.ndarray
@@ -41,23 +42,23 @@ class SKABPreprocessor:
         X = df.drop(columns=cfg.exclude_cols + [cfg.target_col], errors="ignore")
         return X, target, groups
 
-    def fit_transform(self, X: pd.DataFrame) -> np.ndarray:
+    def fit_transform(self, X: pd.DataFrame, use_pca: bool = True) -> np.ndarray:
         arr = X.values.astype(float)
         if self.config.preprocessing.handle_missing:
             arr = _fill_missing(arr)
         if self.config.preprocessing.normalize:
             arr = self.scaler.fit_transform(arr)
-        if self.config.preprocessing.pca.enabled:
+        if use_pca and self.config.preprocessing.pca.enabled:
             arr = self.pca.fit_transform(arr)
         return arr
 
-    def transform(self, X: pd.DataFrame) -> np.ndarray:
+    def transform(self, X: pd.DataFrame, use_pca: bool = True) -> np.ndarray:
         arr = X.values.astype(float)
         if self.config.preprocessing.handle_missing:
             arr = _fill_missing(arr)
         if self.config.preprocessing.normalize:
             arr = self.scaler.transform(arr)
-        if self.config.preprocessing.pca.enabled:
+        if use_pca and self.config.preprocessing.pca.enabled:
             arr = self.pca.transform(arr)
         return arr
 
@@ -87,7 +88,12 @@ class BATADALPreprocessor:
         y = df[cfg.label_col].values
         return X, y
 
-    def split(self, df: pd.DataFrame) -> DataSplit:
+    def split(self, df: pd.DataFrame, use_pca: bool = True) -> DataSplit:
+        """
+        use_pca=False → DL modelleri için tüm özellikler (43 boyut)
+        use_pca=True  → Otomata modeli için PC1 (1 boyut)
+        Scaler her iki durumda da sadece train verisiyle fit edilir.
+        """
         cfg = self.config.data.batadal
         X, y = self.get_features_target(df)
         n = len(df)
@@ -98,10 +104,9 @@ class BATADALPreprocessor:
         X_val_raw = X.iloc[train_end:val_end]
         X_test_raw = X.iloc[val_end:]
 
-        # Scaler ve PCA sadece train üzerinde fit edilir
-        X_train = self._fit_transform(X_train_raw)
-        X_val = self._transform(X_val_raw)
-        X_test = self._transform(X_test_raw)
+        X_train = self._fit_transform(X_train_raw, use_pca=use_pca)
+        X_val = self._transform(X_val_raw, use_pca=use_pca)
+        X_test = self._transform(X_test_raw, use_pca=use_pca)
 
         return DataSplit(
             X_train=X_train,
@@ -112,23 +117,23 @@ class BATADALPreprocessor:
             y_test=y[val_end:],
         )
 
-    def _fit_transform(self, X: pd.DataFrame) -> np.ndarray:
+    def _fit_transform(self, X: pd.DataFrame, use_pca: bool = True) -> np.ndarray:
         arr = X.values.astype(float)
         if self.config.preprocessing.handle_missing:
             arr = _fill_missing(arr)
         if self.config.preprocessing.normalize:
             arr = self.scaler.fit_transform(arr)
-        if self.config.preprocessing.pca.enabled:
+        if use_pca and self.config.preprocessing.pca.enabled:
             arr = self.pca.fit_transform(arr)
         return arr
 
-    def _transform(self, X: pd.DataFrame) -> np.ndarray:
+    def _transform(self, X: pd.DataFrame, use_pca: bool = True) -> np.ndarray:
         arr = X.values.astype(float)
         if self.config.preprocessing.handle_missing:
             arr = _fill_missing(arr)
         if self.config.preprocessing.normalize:
             arr = self.scaler.transform(arr)
-        if self.config.preprocessing.pca.enabled:
+        if use_pca and self.config.preprocessing.pca.enabled:
             arr = self.pca.transform(arr)
         return arr
 

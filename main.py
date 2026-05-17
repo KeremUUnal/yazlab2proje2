@@ -21,9 +21,17 @@ def main():
         default="both",
         help="Çalıştırılacak veri seti",
     )
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Sonuçların kaydedileceği klasör (varsayılan: config'deki değer)",
+    )
     args = parser.parse_args()
 
     config = Config.from_yaml(args.config)
+    if args.output_dir:
+        config.results.output_dir = args.output_dir
+        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     runner = ExperimentRunner(config)
     all_results = {}
 

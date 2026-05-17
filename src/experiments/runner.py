@@ -31,7 +31,7 @@ class ExperimentRunner:
         loader = BATADALLoader(self.config)
         df = loader.load()
         preprocessor = BATADALPreprocessor(self.config)
-        split = preprocessor.split(df)
+        split = preprocessor.split(df, use_pca=True)
 
         results = {}
         for model_name, model_cls in DL_MODELS.items():
@@ -91,8 +91,8 @@ class ExperimentRunner:
                     y_tr = y[train_idx]
                     y_te = y[test_idx]
 
-                    X_tr = fold_preprocessor.fit_transform(X_tr_raw)
-                    X_te = fold_preprocessor.transform(X_te_raw)
+                    X_tr = fold_preprocessor.fit_transform(X_tr_raw, use_pca=True)
+                    X_te = fold_preprocessor.transform(X_te_raw, use_pca=True)
 
                     if scenario == "noisy":
                         X_tr = add_gaussian_noise(X_tr, self.config)
