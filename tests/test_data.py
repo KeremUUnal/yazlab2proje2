@@ -30,9 +30,12 @@ def test_batadal_split_shapes(config):
 
     total = len(split.X_train) + len(split.X_val) + len(split.X_test)
     assert total == 1000
-    assert split.X_train.shape[1] == config.preprocessing.pca.n_components
-    assert split.X_val.shape[1] == config.preprocessing.pca.n_components
-    assert split.X_test.shape[1] == config.preprocessing.pca.n_components
+    # PCA bileşen sayısı özellik sayısıyla sınırlandırılır
+    n_features = 2  # mock veri: F1, F2
+    expected_components = min(config.preprocessing.pca.n_components, n_features)
+    assert split.X_train.shape[1] == expected_components
+    assert split.X_val.shape[1] == expected_components
+    assert split.X_test.shape[1] == expected_components
 
 
 def test_batadal_split_ratios(config):

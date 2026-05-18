@@ -31,7 +31,7 @@ class SKABPreprocessor:
     def __init__(self, config: Config):
         self.config = config
         self.scaler = StandardScaler()
-        self.pca = PCA(n_components=config.preprocessing.pca.n_components)
+        self.pca = None  # fit_transform sırasında özellik sayısına göre oluşturulur
 
     def get_features_target(
         self, df: pd.DataFrame
@@ -49,6 +49,8 @@ class SKABPreprocessor:
         if self.config.preprocessing.normalize:
             arr = self.scaler.fit_transform(arr)
         if use_pca and self.config.preprocessing.pca.enabled:
+            n_comp = min(self.config.preprocessing.pca.n_components, arr.shape[1])
+            self.pca = PCA(n_components=n_comp)
             arr = self.pca.fit_transform(arr)
         return arr
 
@@ -77,7 +79,7 @@ class BATADALPreprocessor:
     def __init__(self, config: Config):
         self.config = config
         self.scaler = StandardScaler()
-        self.pca = PCA(n_components=config.preprocessing.pca.n_components)
+        self.pca = None  # _fit_transform sırasında özellik sayısına göre oluşturulur
 
     def get_features_target(
         self, df: pd.DataFrame
@@ -124,6 +126,8 @@ class BATADALPreprocessor:
         if self.config.preprocessing.normalize:
             arr = self.scaler.fit_transform(arr)
         if use_pca and self.config.preprocessing.pca.enabled:
+            n_comp = min(self.config.preprocessing.pca.n_components, arr.shape[1])
+            self.pca = PCA(n_components=n_comp)
             arr = self.pca.fit_transform(arr)
         return arr
 
