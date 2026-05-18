@@ -5,6 +5,8 @@ data/processed/
 # Model çıktıları ve sonuçlar
 results/*.json
 results/*.png
+results2/
+results_skab/
 logs/
 
 # Python

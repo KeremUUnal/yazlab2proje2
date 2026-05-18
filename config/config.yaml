@@ -22,7 +22,7 @@ preprocessing:
   handle_missing: true
   pca:
     enabled: true
-    n_components: 1
+    n_components: 5
 
 model:
   seeds: [42, 123, 2026, 7, 999]

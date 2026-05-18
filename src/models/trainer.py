@@ -61,12 +61,18 @@ class Trainer:
 
             t0 = time.time()
             y_pred = model.predict(X_te_seq)
+            y_proba = model.predict_proba(X_te_seq)
             infer_time = time.time() - t0
 
             metrics = compute_metrics(y_te_seq, y_pred)
             metrics["seed"] = seed
             metrics["train_time_sec"] = round(train_time, 3)
             metrics["inference_time_sec"] = round(infer_time, 4)
+            # Sadece ilk seed için tahminleri sakla (görselleştirme için)
+            if seed == self.config.model.seeds[0]:
+                metrics["y_true"] = y_te_seq.tolist()
+                metrics["y_pred"] = y_pred.tolist()
+                metrics["y_proba"] = y_proba.tolist()
             all_results.append(metrics)
 
             print(
