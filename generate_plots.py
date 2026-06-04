@@ -23,6 +23,7 @@ from sklearn.metrics import (
 )
 
 MODELS = ["LSTM", "GRU", "CNN"]
+ALL_MODELS = ["LSTM", "GRU", "CNN", "Automata"]
 SCENARIOS = ["original", "noisy"]
 
 
@@ -380,11 +381,111 @@ def generate_cross_dataset_plot(
 # Ana fonksiyon
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Otomata gorsellestirmeleri
+# ---------------------------------------------------------------------------
+
+def generate_automata_plots(results_dir: Path, out_dir: Path, dataset_upper: str) -> None:
+    """Otomata modeline ozel gorseller: heatmap, state diagram, parametre analizi."""
+    print(f"\n=== {dataset_upper} Otomata Gorselleri ===")
+
+    from copy import deepcopy
+    from src.config import Config
+    from src.data.loader import BATADALLoader, SKABLoader
+    from src.data.preprocessor import BATADALPreprocessor, SKABPreprocessor
+    from src.automata.automata import ProbabilisticAutomata
+    from src.visualization.automata_plots import (
+        plot_transition_heatmap,
+        plot_state_diagram,
+        plot_param_sensitivity_grid,
+        plot_dl_vs_automata,
+    )
+
+    cfg = Config.from_yaml("config/config.yaml")
+    cfg.results.output_dir = str(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Otomata icin PCA=1
+    cfg_auto = deepcopy(cfg)
+    cfg_auto.preprocessing.pca.n_components = 1
+
+    ds = dataset_upper.lower()
+    if ds == "batadal":
+        df = BATADALLoader(cfg_auto).load()
+        split = BATADALPreprocessor(cfg_auto).split(df, use_pca=True)
+        X_train, y_train = split.X_train, split.y_train
+        X_test, y_test = split.X_test, split.y_test
+    else:
+        df = SKABLoader(cfg_auto).load()
+        prep = SKABPreprocessor(cfg_auto)
+        X_raw, y, groups = prep.get_features_target(df)
+        splits = prep.get_cv_splits(X_raw.values, y, groups)
+        train_idx, test_idx = splits[0]
+        fold_prep = SKABPreprocessor(cfg_auto)
+        X_train = fold_prep.fit_transform(X_raw.iloc[train_idx], use_pca=True)
+        X_test = fold_prep.transform(X_raw.iloc[test_idx], use_pca=True)
+        y_train, y_test = y[train_idx], y[test_idx]
+
+    # Model egit
+    model = ProbabilisticAutomata(cfg_auto.automata)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    y_proba = model.predict_proba(X_test)
+
+    # Transition Heatmap
+    plot_transition_heatmap(model, dataset_upper, cfg)
+    print(f"  Transition heatmap olusturuldu")
+
+    # State Diagram
+    try:
+        import networkx
+        plot_state_diagram(model, dataset_upper, cfg)
+        print(f"  State diagram olusturuldu")
+    except ImportError:
+        print(f"  networkx yuklenmemis — state diagram atlandi (pip install networkx)")
+
+    # Confusion Matrix
+    plot_confusion_matrix(
+        y_test, y_pred,
+        title=f"Confusion Matrix — Automata {dataset_upper}",
+        out_path=out_dir / f"cm_{dataset_upper}_Automata_original.png",
+    )
+
+    # ROC + PR
+    plot_roc(
+        y_test, y_proba,
+        title=f"ROC Egrisi — Automata {dataset_upper}",
+        out_path=out_dir / f"roc_{dataset_upper}_Automata_original.png",
+    )
+    plot_pr(
+        y_test, y_proba,
+        title=f"Precision-Recall — Automata {dataset_upper}",
+        out_path=out_dir / f"pr_{dataset_upper}_Automata_original.png",
+    )
+
+    # Parametre analizi gorselleri
+    param_path = results_dir / f"{ds}_param_analysis.json"
+    if param_path.exists():
+        param_results = load_json(param_path)
+        plot_param_sensitivity_grid(param_results, dataset_upper, cfg)
+        print(f"  Parametre grafikleri olusturuldu")
+    else:
+        print(f"  Parametre analizi yok — once: python main.py --param-analysis --dataset {ds}")
+
+    # DL vs Automata karsilastirma
+    all_path = results_dir / "all_results.json"
+    if all_path.exists():
+        all_results = load_json(all_path)
+        plot_dl_vs_automata(all_results, dataset_upper, cfg)
+        print(f"  DL vs Automata grafigi olusturuldu")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Gorselleştirme uretici")
     parser.add_argument("--batadal-dir", default="results2", help="BATADAL JSON dizini")
     parser.add_argument("--skab-dir", default="results_skab", help="SKAB JSON dizini")
     parser.add_argument("--output-dir", default="plots", help="Gorsel cıktı dizini")
+    parser.add_argument("--results-dir", default="results", help="Ortak results dizini (otomata icin)")
     parser.add_argument(
         "--dataset",
         choices=["batadal", "skab", "both"],
@@ -394,13 +495,16 @@ def main():
 
     batadal_dir = Path(args.batadal_dir)
     skab_dir = Path(args.skab_dir)
+    results_dir = Path(args.results_dir)
     out_dir = Path(args.output_dir)
 
     if args.dataset in ("batadal", "both"):
         generate_batadal_plots(batadal_dir, out_dir / "batadal")
+        generate_automata_plots(results_dir, out_dir / "batadal", "BATADAL")
 
     if args.dataset in ("skab", "both"):
         generate_skab_plots(skab_dir, out_dir / "skab")
+        generate_automata_plots(results_dir, out_dir / "skab", "SKAB")
 
     if args.dataset == "both":
         generate_cross_dataset_plot(batadal_dir, skab_dir, out_dir)
