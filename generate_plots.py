@@ -208,6 +208,13 @@ def generate_batadal_plots(results_dir: Path, out_dir: Path) -> None:
                     out_path=out_dir / f"pr_BATADAL_{model}_{scenario}.png",
                 )
 
+    # Otomata sonucunu all_metrics grafigine ekle (varsa)
+    auto_path = results_dir / "BATADAL_Automata_original.json"
+    if auto_path.exists():
+        all_orig["Automata"] = load_json(auto_path)
+    else:
+        print(f"  Otomata sonucu yok ({auto_path}) — all_metrics'e eklenmedi")
+
     if orig_means:
         plot_model_comparison(
             MODELS[:len(orig_means)], orig_means, orig_stds,
@@ -220,7 +227,7 @@ def generate_batadal_plots(results_dir: Path, out_dir: Path) -> None:
             out_path=out_dir / "noise_comparison_BATADAL.png",
         )
         plot_all_metrics_comparison(
-            MODELS[:len(all_orig)], all_orig,
+            list(all_orig.keys()), all_orig,
             title="Tum Metrikler — BATADAL (Original)",
             out_path=out_dir / "all_metrics_BATADAL.png",
         )
@@ -326,8 +333,21 @@ def generate_skab_plots(results_dir: Path, out_dir: Path) -> None:
                 "recall_mean": r.get("recall_fold_mean", r.get("recall_mean", 0)),
                 "f1_mean": r.get("f1_fold_mean", r.get("f1_mean", 0)),
             }
+
+        # Otomata sonucunu all_metrics grafigine ekle (varsa)
+        auto = all_data.get("SKAB_Automata_original")
+        if auto:
+            compat_orig["Automata"] = {
+                "accuracy_mean": auto.get("accuracy_fold_mean", auto.get("accuracy_mean", 0)),
+                "precision_mean": auto.get("precision_fold_mean", auto.get("precision_mean", 0)),
+                "recall_mean": auto.get("recall_fold_mean", auto.get("recall_mean", 0)),
+                "f1_mean": auto.get("f1_fold_mean", auto.get("f1_mean", 0)),
+            }
+        else:
+            print("  Otomata sonucu yok (SKAB_Automata_original) — all_metrics'e eklenmedi")
+
         plot_all_metrics_comparison(
-            valid_models, compat_orig,
+            list(compat_orig.keys()), compat_orig,
             title="Tum Metrikler — SKAB (Original)",
             out_path=out_dir / "all_metrics_SKAB.png",
         )
