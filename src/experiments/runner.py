@@ -294,6 +294,9 @@ class ExperimentRunner:
                 "unseen_ratio": report["summary"]["unseen_ratio"],
             },
             "explainability_summary": report["summary"],
+            "y_true": y_test.tolist(),
+            "y_pred": y_pred.tolist(),
+            "y_proba": y_proba.tolist(),
         }
 
         # Sonucu kaydet
