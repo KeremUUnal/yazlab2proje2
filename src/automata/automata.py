@@ -378,18 +378,38 @@ class ProbabilisticAutomata(BaseAutomataModel):
             # State anomali orani
             state_anomaly = self.state_anomaly_rate.get(resolved, 0.5)
 
-            # Gecis bilgisi
+            # Gecis bilgisi: gelen (prev->current) ve giden (current->next)
             transitions = {}
-            trans_prob = 1.0
 
+            # Gelen gecis: P(prev_state -> current_state)
+            incoming_prob = None
+            if i > 0:
+                prev_resolved, _, _ = self.unseen_handler.resolve(patterns[i - 1])
+                incoming_prob = self._get_transition_prob(patterns[i - 1], patterns[i])
+                transitions[f"{prev_resolved}->{resolved}"] = round(incoming_prob, 6)
+
+            # Giden gecis: P(current_state -> next_state)
+            outgoing_prob = None
             if i < len(patterns) - 1:
-                next_pattern = patterns[i + 1]
-                next_resolved, _, _ = self.unseen_handler.resolve(next_pattern)
-                trans_prob = self._get_transition_prob(patterns[i], next_pattern)
-                transitions[f"{resolved}->{next_resolved}"] = round(trans_prob, 6)
+                next_resolved, _, _ = self.unseen_handler.resolve(patterns[i + 1])
+                outgoing_prob = self._get_transition_prob(patterns[i], patterns[i + 1])
+                transitions[f"{resolved}->{next_resolved}"] = round(outgoing_prob, 6)
+
+            # Path probability: yerel gecislerin carpimi (ornekteki gibi)
+            #   P(path) = P(prev->current) * P(current->next)
+            path_prob = 1.0
+            if incoming_prob is not None:
+                path_prob *= incoming_prob
+            if outgoing_prob is not None:
+                path_prob *= outgoing_prob
 
             anomaly_score = scores[i]
             decision = "anomaly" if anomaly_score >= self.anomaly_threshold else "normal"
+            justification = (
+                "Dusuk olasilikli path tespit edildi (beklenmeyen gecis)"
+                if decision == "anomaly"
+                else "Yuksek olasilikli path (beklenen gecis)"
+            )
 
             explanation = {
                 "time_step": i,
@@ -399,12 +419,19 @@ class ProbabilisticAutomata(BaseAutomataModel):
                 "mapped_to": resolved if is_unseen else None,
                 "distance": distance if is_unseen else 0,
                 "transitions": transitions,
-                "transition_probability": round(trans_prob, 6),
+                # Tek giden gecisin olasiligi (kumulatif path icin kullanilir)
+                "transition_probability": round(
+                    outgoing_prob if outgoing_prob is not None else 1.0, 6
+                ),
+                # Dizinin yerel toplam olasiligi (ornek F'deki "probability")
+                "path_probability": round(path_prob, 6),
                 "state_anomaly_rate": round(state_anomaly, 6),
                 "anomaly_score": round(anomaly_score, 6),
-                "probability": round(trans_prob, 6),
+                "probability": round(path_prob, 6),
                 "decision": decision,
-                "confidence": round(1.0 - abs(anomaly_score - self.anomaly_threshold), 6),
+                "justification": justification,
+                # Guven skoru gecis olasiliklarindan turetilir (gereksinim B)
+                "confidence": round(path_prob, 6),
             }
             explanations.append(explanation)
 

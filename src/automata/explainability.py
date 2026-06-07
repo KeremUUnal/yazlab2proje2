@@ -53,13 +53,13 @@ class ExplainabilityModule:
         raw_explanations = self.model.explain(X)
 
         # Kumulatif path probability ekle
+        # Tum dizinin path olasiligi = ardisik giden gecislerin carpimi
         cumulative_prob = 1.0
         enriched = []
 
         for i, exp in enumerate(raw_explanations):
-            if exp["transitions"]:
-                step_prob = list(exp["transitions"].values())[0]
-                cumulative_prob *= step_prob
+            # transition_probability = bu adimin giden gecisi P(current->next)
+            cumulative_prob *= exp.get("transition_probability", 1.0)
 
             enriched_exp = {
                 **exp,
@@ -145,15 +145,22 @@ class ExplainabilityModule:
 
         lines.append("")
         lines.append("Transitions:")
-        for trans, prob in explanation.get("transitions", {}).items():
+        trans_items = explanation.get("transitions", {})
+        for trans, prob in trans_items.items():
             lines.append(f"  {trans} : {prob}")
 
         lines.append("")
-        lines.append(f"Path Probability: {explanation.get('probability', '?')}")
+        # Path probability'yi carpim ifadesiyle goster (ornekteki gibi)
+        path_prob = explanation.get("path_probability", explanation.get("probability", "?"))
+        trans_values = list(trans_items.values())
+        if len(trans_values) >= 2:
+            expr = " * ".join(str(v) for v in trans_values)
+            lines.append(f"Path Probability: {expr} = {path_prob}")
+        else:
+            lines.append(f"Path Probability: {path_prob}")
         lines.append("")
         lines.append("Decision:")
 
-        prob = explanation.get("probability", 0)
         if explanation.get("decision") == "anomaly":
             lines.append("  Low probability path detected")
             lines.append("  Result: ANOMALY")
@@ -161,6 +168,8 @@ class ExplainabilityModule:
             lines.append("  Normal probability path")
             lines.append("  Result: NORMAL")
 
-        lines.append(f"  Confidence Score: {explanation.get('confidence', '?')}")
+        conf = explanation.get("confidence", "?")
+        conf_label = "Low" if isinstance(conf, (int, float)) and conf < 0.5 else "High"
+        lines.append(f"  Confidence Score: {conf} ({conf_label})")
 
         return "\n".join(lines)

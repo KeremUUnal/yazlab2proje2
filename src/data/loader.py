@@ -19,7 +19,7 @@ class SKABLoader:
             for csv_file in csv_files:
                 df = pd.read_csv(csv_file, sep=cfg.separator)
                 df["source_group"] = folder
-                df["source_file"] = csv_file.name
+                df["source_file"] = f"{folder}/{csv_file.name}"
                 dfs.append(df)
         if not dfs:
             raise FileNotFoundError(f"SKAB verisi bulunamadı: {base}")
