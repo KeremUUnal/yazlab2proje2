@@ -36,15 +36,17 @@ Modeller yalnızca performans değil; gürültüye dayanıklılık, unseen veri 
 
 ### SKAB (Skoltech Anomaly Benchmark)
 - Kaynak: `data/raw/SKAB/valve1/` ve `valve2/` klasörleri
-- Tüm `.csv` dosyaları birleştirildi; `source_group` ve `source_file` takip sütunları eklendi
+- Tüm `.csv` dosyaları birleştirildi; `source_group` (valve1/valve2) ve `source_file` takip sütunları eklendi
+- `source_file`, klasör önekiyle benzersizleştirildi (`valve1/0.csv`, `valve2/0.csv`) — böylece iki klasördeki aynı adlı dosyalar GroupKFold'da çakışmaz ve veri sızıntısı önlenir
 - Hedef değişken: `anomaly` (0=normal, 1=anomali)
 - Model girdisi dışı sütunlar: `datetime`, `changepoint`, `source_group`, `source_file`
 - Değerlendirme: **StratifiedGroupKFold** (5 fold, `source_file` grup değişkeni)
 
 ### BATADAL (Battle of the Attack Detection ALgorithms)
 - Kaynak: `data/raw/BATADAL/BATADAL_dataset04.csv` (Training Dataset 2)
-- Hedef değişken: `ATT_FLAG` (-999 → 0 normal, 1 → saldırı)
-- Zaman sütunu (`DATETIME`) model girdisi dışı tutuldu
+- Hedef değişken: `ATT_FLAG` (-999 → 0 normal, diğer → 1 saldırı/anomali); veri dosyasında doğrulandı
+- Anomali oranı ~%5.2 (219 / 4177 kayıt)
+- 43 sensör/sistem değişkeni model girdisi; zaman sütunu (`DATETIME`) model girdisi dışı tutuldu
 - Değerlendirme: **Zaman sıralı bölme** — %60 eğitim / %20 doğrulama / %20 test
 
 ---
@@ -76,19 +78,16 @@ python main.py --dataset both --model dl --output-dir results
 python main.py --dataset both --model automata --output-dir results
 
 # Parametre analizi (window_size x alphabet_size)
-python main.py --param-analysis --dataset batadal --output-dir results
+python main.py --param-analysis --dataset both --output-dir results
 
-# DL görsellerini üret
-python generate_plots.py
-
-# Automata görsellerini üret (state diagram, heatmap vb.)
-python generate_automata_plots.py
+# Tüm görselleri üret (DL + Automata: CM/ROC/PR, state diagram, heatmap, parametre grafikleri)
+python generate_plots.py --batadal-dir results --skab-dir results --results-dir results --dataset both
 
 # İstatistiksel testleri çalıştır
-python run_statistical_tests.py
+python run_statistical_tests.py --batadal-dir results --skab-dir results --output results/statistical_tests.json
 
 # Birim testleri çalıştır
-python -m pytest tests/
+python -m pytest -q
 ```
 
 ---
@@ -126,17 +125,19 @@ yazlab2proje2/
 │       ├── plots.py          # DL görsel fonksiyonları
 │       └── automata_plots.py # Automata görsel fonksiyonları
 ├── tests/
+│   ├── conftest.py           # Ortak pytest fixture'ları (config)
 │   ├── test_data.py          # Veri pipeline birim testleri
 │   └── test_automata.py      # PAA, SAX, Levenshtein birim testleri (31 test)
 ├── main.py                   # Ana giriş noktası
-├── generate_plots.py         # DL görsel üretici
-├── generate_automata_plots.py# Automata görsel üretici
+├── generate_plots.py         # Görsel üretici (DL + Automata)
 └── run_statistical_tests.py  # McNemar istatistiksel testler
 ```
 
 **Temel tasarım kararları:**
 - Tüm parametreler `config/config.yaml`'da — hiçbir yerde hard-coded değer yok
 - Scaler ve PCA yalnızca train verisiyle `fit` edilir (data leakage önleme)
+- SAX/PAA sözlüğü ve otomata geçiş olasılıkları yalnızca train verisiyle oluşturulur
+- SKAB'da `source_file` grup değişkeni klasör önekli tutulur; aynı dosyanın kayıtları hem train hem test'te yer almaz
 - DL modelleri 5 PCA bileşeni, Automata modeli PC1 (1 bileşen) kullanır
 - Sınıf dengesizliği: DL modellerinde `pos_weight = n_neg / n_pos` ile ağırlıklı BCELoss
 
@@ -176,49 +177,49 @@ yazlab2proje2/
 
 | Model | Senaryo | F1 (mean ± std) | Accuracy | Precision | Recall |
 |-------|---------|-----------------|----------|-----------|--------|
-| LSTM | Original | 0.5813 ± 0.0717 | 0.8720 | 0.4747 | 0.8425 |
+| LSTM | Original | 0.5799 ± 0.0711 | 0.8715 | 0.4719 | 0.8425 |
 | LSTM | Noisy | 0.5462 ± 0.0986 | 0.8352 | 0.4141 | 0.9075 |
 | GRU | Original | 0.5704 ± 0.0572 | 0.8486 | 0.4045 | 0.9850 |
 | GRU | Noisy | 0.5616 ± 0.0464 | 0.8452 | 0.3958 | 0.9800 |
 | CNN | Original | 0.4666 ± 0.0899 | 0.7717 | 0.3120 | 0.9575 |
 | CNN | Noisy | 0.4270 ± 0.0840 | 0.7352 | 0.2788 | 0.9500 |
-| **Automata** | Original | 0.1556 | 0.6364 | 0.1000 | 0.3500 |
-| **Automata** | Noisy | 0.1978 | 0.6507 | 0.1268 | 0.4500 |
-| **Automata** | Unseen | 0.1556 | 0.6364 | 0.1000 | 0.3500 |
+| **Automata** | Original | 0.1522 | 0.6268 | 0.0972 | 0.3500 |
+| **Automata** | Noisy | 0.1935 | 0.6411 | 0.1233 | 0.4500 |
+| **Automata** | Unseen | 0.1522 | 0.6268 | 0.0972 | 0.3500 |
 
 ### SKAB Sonuçları (5-Fold Ortalama)
 
 | Model | Senaryo | F1 (mean ± std) | Accuracy | Precision | Recall |
 |-------|---------|-----------------|----------|-----------|--------|
-| LSTM | Original | 0.8938 ± 0.0395 | 0.9275 | 0.9216 | 0.8735 |
-| LSTM | Noisy | 0.8880 ± 0.0483 | 0.9236 | 0.9172 | 0.8681 |
-| GRU | Original | **0.9025 ± 0.0377** | 0.9332 | 0.9295 | 0.8810 |
-| GRU | Noisy | 0.8921 ± 0.0414 | 0.9267 | 0.9261 | 0.8682 |
-| CNN | Original | 0.8977 ± 0.0471 | 0.9284 | 0.9188 | 0.8830 |
-| CNN | Noisy | 0.8949 ± 0.0463 | 0.9263 | 0.9145 | 0.8817 |
-| **Automata** | Original | 0.4645 ± 0.0171 | 0.4150 | 0.3411 | 0.7287 |
-| **Automata** | Noisy | 0.4688 ± 0.0149 | 0.4167 | 0.3434 | 0.7392 |
-| **Automata** | Unseen | 0.4645 ± 0.0171 | 0.4150 | 0.3411 | 0.7287 |
+| LSTM | Original | **0.9066 ± 0.0272** | 0.9369 | 0.9383 | 0.8794 |
+| LSTM | Noisy | 0.9022 ± 0.0191 | 0.9350 | 0.9437 | 0.8674 |
+| GRU | Original | 0.8974 ± 0.0289 | 0.9296 | 0.9187 | 0.8803 |
+| GRU | Noisy | 0.9005 ± 0.0325 | 0.9316 | 0.9180 | 0.8868 |
+| CNN | Original | 0.8957 ± 0.0452 | 0.9279 | 0.9118 | 0.8836 |
+| CNN | Noisy | 0.8937 ± 0.0458 | 0.9264 | 0.9082 | 0.8826 |
+| **Automata** | Original | 0.4777 ± 0.0193 | 0.4010 | 0.3432 | 0.7886 |
+| **Automata** | Noisy | 0.4768 ± 0.0165 | 0.3947 | 0.3413 | 0.7944 |
+| **Automata** | Unseen | 0.4777 ± 0.0193 | 0.4010 | 0.3432 | 0.7886 |
 
 ### Veri Setleri Arası Karşılaştırma
 
-DL modelleri SKAB'da belirgin şekilde daha iyi performans göstermektedir (F1 ~0.90 vs ~0.58). BATADAL'da sınıf dengesizliği (yaklaşık %12 anomali) ve yüksek boyutlu sensör verisi (43 özellik → 5 PCA bileşeni) zorluğu artırmaktadır. Automata modeli PC1 tek bileşenle çalıştığından BATADAL'da bilgi kaybı daha yüksektir.
+DL modelleri SKAB'da belirgin şekilde daha iyi performans göstermektedir (F1 ~0.90 vs ~0.58). BATADAL'da sınıf dengesizliği (~%5.2 anomali) ve yüksek boyutlu sensör verisi (43 özellik → 5 PCA bileşeni) zorluğu artırmaktadır. Automata modeli PC1 tek bileşenle çalıştığından BATADAL'da bilgi kaybı daha yüksektir.
 
 ### Gürültü Etkisi Analizi
 
 Gaussian gürültü (std=0.1) eklendiğinde:
-- **DL modelleri:** F1'de ortalama ~0.03-0.05 düşüş — yüksek dayanıklılık
-- **Automata:** BATADAL'da F1 hafif artış (0.1556 → 0.1978), SKAB'da minimal değişim — gürültü bazı durumlarda anomali skorunu değiştiriyor
+- **DL modelleri:** F1 büyük ölçüde korunur — SKAB'da değişim ~0.00–0.01 (GRU gürültüyle hafifçe iyileşir bile), BATADAL'da ~0.01–0.04 düşüş. Yüksek dayanıklılık.
+- **Automata:** BATADAL'da F1 hafif artış (0.1522 → 0.1935), SKAB'da minimal değişim — gürültü bazı durumlarda anomali skorunu değiştiriyor.
 
 Genel olarak her iki model tipi de Gaussian gürültüye karşı dayanıklıdır.
 
 ### Unseen Veri Davranışı
 
 Automata modelinde test sırasında eğitim SAX sözlüğünde bulunmayan pattern'larla karşılaşıldığında Levenshtein edit distance ile en yakın bilinen pattern bulunur:
-- BATADAL: Unseen oranı ~%3 (76 state)
-- SKAB: Unseen oranı ~%0.4 (36 state)
+- BATADAL: Unseen oranı ~%2.9 (76 state)
+- SKAB: Unseen oranı ~%0.3 (≈35 state)
 
-Unseen senaryo ile original senaryo arasında performans farkı gözlemlenmemiştir — Levenshtein eşleştirme mekanizması etkin çalışmaktadır.
+Unseen senaryo ile original senaryo arasında performans farkı gözlemlenmemiştir — Levenshtein eşleştirme mekanizması her tahminde etkin çalıştığından görülmemiş pattern'lar en yakın bilinen state üzerinden işlenir.
 
 ---
 
@@ -238,11 +239,11 @@ Model farklarının istatistiksel anlamlılığı **McNemar testi** ile değerle
 
 | Karşılaştırma | Original p-değeri | Noisy p-değeri |
 |---------------|-------------------|----------------|
-| LSTM vs GRU | p = 0.0002 ✓ | p = 0.0002 ✓ |
-| LSTM vs CNN | p = 0.0002 ✓ | p < 0.0001 ✓ |
-| GRU vs CNN | p = 0.6728 ✗ | p = 0.0342 ✓ |
+| LSTM vs GRU | p < 0.0001 ✓ | p < 0.0001 ✓ |
+| LSTM vs CNN | p < 0.0001 ✓ | p < 0.0001 ✓ |
+| GRU vs CNN | p = 0.0022 ✓ | p < 0.0001 ✓ |
 
-**Yorum:** BATADAL'da tüm model çiftleri anlamlı farklılık göstermektedir. SKAB'da GRU ve CNN benzer performans sergilemekte (original senaryoda p=0.67, anlamsız), bu durum iki modelin bu veri setinde neredeyse eşdeğer olduğuna işaret etmektedir.
+**Yorum:** Hem BATADAL hem SKAB'da tüm model çiftleri istatistiksel olarak anlamlı farklılık göstermektedir (p < 0.05). SKAB'da en yüksek F1'i LSTM (0.9066) elde etmekle birlikte üç DL modeli de yüksek ve birbirine yakın performans sergilemektedir; McNemar testi bu yakın farkların dahi örnek bazında anlamlı olduğunu göstermektedir.
 
 > **Not:** Wilcoxon testi n=5 seed ile minimum p=0.0625 üretemediğinden (matematiksel sınır), daha güçlü olan McNemar testi tercih edilmiştir.
 
@@ -255,30 +256,59 @@ Automata modeli her karar için aşağıdaki bilgileri üretmektedir:
 ```json
 {
   "time_step": 5,
-  "state": "aab",
+  "state": "abc",
   "pattern": "adc",
   "status": "unseen",
   "mapped_to": "abc",
   "distance": 1,
   "transitions": {
-    "aab->abc": 0.72
+    "aab->abc": 0.72,
+    "abc->bcc": 0.15
   },
-  "transition_probability": 0.72,
-  "state_anomaly_rate": 0.031,
-  "anomaly_score": 0.412,
-  "probability": 0.72,
-  "decision": "normal",
-  "confidence": 0.908
+  "transition_probability": 0.15,
+  "path_probability": 0.108,
+  "state_anomaly_rate": 0.412,
+  "anomaly_score": 0.55,
+  "probability": 0.108,
+  "decision": "anomaly",
+  "justification": "Dusuk olasilikli path tespit edildi (beklenmeyen gecis)",
+  "confidence": 0.108
 }
 ```
 
-**Güven skoru** hesaplaması: `1.0 - |anomaly_score - threshold|`
+**Geçiş olasılıkları** frekans tabanlı öğrenilir: `P(Si → Sj) = Geçiş Sayısı / Toplam Çıkış Sayısı` (Laplace α=1e-6 ile).
+
+**Path probability:** Gözlemlenen yerel geçişlerin çarpımı — `path_probability = P(prev → current) × P(current → next)`. Düşük path olasılığı, model tarafından beklenmeyen davranış olarak yorumlanır.
+
+**Güven skoru** doğrudan geçiş olasılıklarından türetilir: `confidence = path_probability`. Düşük path olasılığı → düşük güven → beklenmeyen (anomali) davranış (örnekte 0.72 × 0.15 = 0.108).
 
 **Anomali skoru** iki sinyal birleştirilerek hesaplanır:
 - State anomali oranı (eğitimden öğrenilir): `0.6 × state_anomaly_rate`
 - Geçiş beklenmedikliği: `0.4 × (1 - transition_probability)`
 
-**Path probability:** Ardışık geçiş olasılıklarının çarpımı — `P(sequence) = ∏ P(Si → Si+1)`
+Metin (insan-okur) formatı `format_decision()` ile de üretilir:
+
+```
+[SYSTEM DECISION]
+Time Step: t = 5
+Previous State: "aab"
+Incoming Pattern: "adc"
+Status: Unseen
+Nearest Pattern: "abc" (distance = 1)
+
+Transitions:
+  aab->abc : 0.72
+  abc->bcc : 0.15
+
+Path Probability: 0.72 * 0.15 = 0.108
+
+Decision:
+  Low probability path detected
+  Result: ANOMALY
+  Confidence Score: 0.108 (Low)
+```
+
+Açıklamalar deterministik ve yeniden üretilebilirdir; modelin iç hesaplamalarıyla tutarlıdır.
 
 ---
 
@@ -288,15 +318,15 @@ Automata modeli için window_size × alphabet_size kombinasyonları BATADAL veri
 
 | window_size | alphabet_size | F1 | State Sayısı | Geçiş Yoğunluğu |
 |-------------|---------------|----|--------------|-----------------|
-| 3 | 3 | 0.2081 | 26 | 0.1050 |
+| 3 | 3 | 0.2045 | 26 | 0.1050 |
 | 4 | 3 | 0.1522 | 76 | 0.0260 |
-| 5 | 5 | 0.2127 | 367 | 0.0032 |
-| 6 | 3 | **0.2440** | 200 | 0.0065 |
-| 6 | 6 | 0.1718 | 375 | 0.0028 |
+| 5 | 4 | 0.2237 | 298 | 0.0042 |
+| 5 | 5 | **0.2362** | 367 | 0.0032 |
+| 6 | 4 | 0.1964 | 304 | 0.0038 |
 
 **Gözlemler:**
 - Alphabet size artışı → daha fazla state → geçiş yoğunluğu düşer
-- En iyi F1: ws=6, as=3 (0.2440) — küçük alfabe ile geniş pencere en iyi dengeyi sağlıyor
+- En iyi F1: ws=5, as=5 (0.2362) — orta-geniş pencere ile orta alfabe en iyi dengeyi sağlıyor
 - Yüksek state sayısı modeli daha açıklayıcı yapar ancak seyrek geçiş matrisine yol açar
 
 ---
@@ -306,10 +336,16 @@ Automata modeli için window_size × alphabet_size kombinasyonları BATADAL veri
 ### Model Karşılaştırmaları
 
 **BATADAL — DL vs Automata**
-![DL vs Automata BATADAL](plots/automata/dl_vs_automata_BATADAL.png)
+![DL vs Automata BATADAL](plots/batadal/dl_vs_automata_BATADAL.png)
 
 **SKAB — DL vs Automata**
-![DL vs Automata SKAB](plots/automata/dl_vs_automata_SKAB.png)
+![DL vs Automata SKAB](plots/skab/dl_vs_automata_SKAB.png)
+
+**Tüm Metrikler — BATADAL (LSTM/GRU/CNN/Automata)**
+![All Metrics BATADAL](plots/batadal/all_metrics_BATADAL.png)
+
+**Tüm Metrikler — SKAB**
+![All Metrics SKAB](plots/skab/all_metrics_SKAB.png)
 
 **Cross-Dataset Karşılaştırma**
 ![Cross Dataset](plots/cross_dataset_comparison.png)
@@ -339,33 +375,33 @@ Automata modeli için window_size × alphabet_size kombinasyonları BATADAL veri
 ### Automata State Diagram
 
 **BATADAL** — Düğüm rengi anomali oranını gösterir (yeşil=normal, kırmızı=anomali)
-![State Diagram BATADAL](plots/automata/state_diagram_BATADAL.png)
+![State Diagram BATADAL](plots/batadal/state_diagram_BATADAL.png)
 
 **SKAB**
-![State Diagram SKAB](plots/automata/state_diagram_SKAB.png)
+![State Diagram SKAB](plots/skab/state_diagram_SKAB.png)
 
 ---
 
 ### Transition Probability Heatmap
 
 **BATADAL**
-![Heatmap BATADAL](plots/automata/transition_heatmap_BATADAL.png)
+![Heatmap BATADAL](plots/batadal/transition_heatmap_BATADAL.png)
 
 **SKAB**
-![Heatmap SKAB](plots/automata/transition_heatmap_SKAB.png)
+![Heatmap SKAB](plots/skab/transition_heatmap_SKAB.png)
 
 ---
 
 ### Parametre Duyarlılık Grafikleri
 
 **BATADAL — F1 Heatmap (Window Size × Alphabet Size)**
-![Param F1 BATADAL](plots/automata/param_f1_heatmap_BATADAL.png)
+![Param F1 BATADAL](plots/batadal/param_f1_heatmap_BATADAL.png)
 
 **BATADAL — State Sayısı Heatmap**
-![Param States BATADAL](plots/automata/param_states_heatmap_BATADAL.png)
+![Param States BATADAL](plots/batadal/param_states_heatmap_BATADAL.png)
 
 **BATADAL — Parametre Duyarlılık Çizgi Grafiği**
-![Param Sensitivity BATADAL](plots/automata/param_sensitivity_BATADAL.png)
+![Param Sensitivity BATADAL](plots/batadal/param_sensitivity_BATADAL.png)
 
 ---
 
